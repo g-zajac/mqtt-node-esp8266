@@ -1,5 +1,5 @@
 //******************************************************************************
-#define FIRMWARE_VERSION 1.03
+#define FIRMWARE_VERSION 1.04
 #define HOSTNAME "mqttnode"
 //#define PRODUCTION_SERIAL true      //uncoment to turn the serial debuging off
 #define SERIAL_SPEED 9600           // 9600 for BLE friend
@@ -10,6 +10,7 @@ extern "C" {
 }
 
 #include <Arduino.h>
+#include "credentials.h"
 #include <ESP8266WiFi.h>          //ESP8266 Core WiFi Library
 #include <DNSServer.h>            //Local DNS Server used for redirecting all requests to the configuration portal
 #include <ESP8266WebServer.h>     //Local WebServer used to serve the configuration portal
@@ -19,6 +20,9 @@ extern "C" {
 //   |--------------|-------|---------------|--|--|--|--|--|
 
 WiFiClient espClient;
+
+#include <PubSubClient.h>
+PubSubClient client(espClient);
 
 #include <Adafruit_NeoPixel.h>
 #define NEO_PIXEL_PIN 14
@@ -33,8 +37,9 @@ uint32_t blue = strip.Color(0, 0, 255);
 uint32_t magenta = strip.Color(255, 0, 255);
 uint32_t blue_light = strip.Color(110, 205, 240);
 uint32_t orange = strip.Color(217, 190, 47);
+uint32_t white = strip.Color(255,255,255);
 
-enum list {SETUP, OTA, PORTAL, WIFI, MQTT, OFF, ALARM};
+enum list {SETUP, OTA, PORTAL, WIFI, MQTT, OFF, ALARM, TEST};
 
 void set_neo_pixel(list status){
   uint32_t color;
@@ -46,13 +51,51 @@ void set_neo_pixel(list status){
     case MQTT : color = blue; break;
     case OFF : color = black; break;
     case ALARM : color = red; break;
+    case TEST : color = white; break;
   }
   strip.setPixelColor(0, color);
   strip.setBrightness(pixelBrightness);
   strip.show();
 }
-
 // -----------------------------------------------------------------------------
+
+void callback(char* topic, byte* payload, unsigned int length) {
+    payload[length] = '\0';
+    String strTopic = String((char*)topic);
+
+    if (strTopic == "node/test") {
+      String msg1 = (char*)payload;
+      Serial.print("Received MQTT: "); Serial.println(msg1);
+      if (msg1 == "true"){ set_neo_pixel(TEST); }
+      if (msg1 == "false"){ set_neo_pixel(OFF); }
+    }
+}
+
+void reconnect() {                                                               //TODO dodac zabezpieczenie, sprawdzic status rain przy reset, odswiezeniu polaczenia
+  // Loop until we're reconnected
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    // Attempt to connect
+    if (client.connect(mqtt_client,mqtt_user,mqtt_pass)) {
+      Serial.println("connected");
+      set_neo_pixel(MQTT);
+      // Once connected, publish an announcement...
+      client.publish("node/status", "connected");
+      char ver[4];
+      dtostrf(FIRMWARE_VERSION, 3, 2, ver);
+      client.publish("node/firmware", ver);
+      // ... and resubscribe
+      client.subscribe("node/#");
+    } else {
+      set_neo_pixel(ALARM);
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 5 seconds");
+      // Wait 5 seconds before retrying
+      delay(5000);
+    }
+  }
+}
 
 void setup() {
     strip.begin();
@@ -123,8 +166,21 @@ void setup() {
 
   ArduinoOTA.begin();
 //------------------------------ end OTA ---------------------------------------
+    client.setServer(mqtt_server, 1883);
+     client.setCallback(callback);
+
+    delay(500);
+    #ifndef PRODUCTION_SERIAL
+        Serial.print("\r\nIP address: ");
+        Serial.println(WiFi.localIP());                                             //FIXME fix 0.0.0.0
+    #endif
+    set_neo_pixel(WIFI);
 }
 
 void loop() {
     ArduinoOTA.handle();
+    if (!client.connected()) {                                                    // portal button didn't work on first uploads
+            reconnect();
+    }
+    client.loop();
 }
