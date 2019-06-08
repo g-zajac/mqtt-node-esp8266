@@ -1,5 +1,5 @@
 //******************************************************************************
-#define FIRMWARE_VERSION 1.05
+#define FIRMWARE_VERSION 1.06
 #define HOSTNAME "mqttnode"
 //#define PRODUCTION_SERIAL true      //uncoment to turn the serial debuging off
 #define SERIAL_SPEED 9600           // 9600 for BLE friend
@@ -93,12 +93,12 @@ void reconnect() {                                                              
       Serial.println("connected");
       set_neo_pixel(MQTT);
       // Once connected, publish an announcement...
-      client.publish("node/status", "connected");
+      client.publish("node/system/status", "connected");
       char ver[4];
       dtostrf(FIRMWARE_VERSION, 3, 2, ver);
-      client.publish("node/firmware", ver);
+      client.publish("node/system/firmware", ver);
       // ... and resubscribe
-      client.subscribe("node/#");
+      client.subscribe("node/test/#");
     } else {
       set_neo_pixel(ALARM);
       Serial.print("failed, rc=");
@@ -108,39 +108,6 @@ void reconnect() {                                                              
       delay(5000);
     }
   }
-}
-
-void measurment() {
-        // Reading temperature or humidity takes about 250 milliseconds!
-    // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
-    float h = dht.readHumidity();
-    // Read temperature as Celsius (the default)
-    float t = dht.readTemperature();
-    // Read temperature as Fahrenheit (isFahrenheit = true)
-    float f = dht.readTemperature(true);
-
-    // Check if any reads failed and exit early (to try again).
-    if (isnan(h) || isnan(t) || isnan(f)) {
-      Serial.println(F("Failed to read from DHT sensor!"));
-      return;
-    }
-
-    // Compute heat index in Fahrenheit (the default)
-    float hif = dht.computeHeatIndex(f, h);
-    // Compute heat index in Celsius (isFahreheit = false)
-    float hic = dht.computeHeatIndex(t, h, false);
-
-    Serial.print(F("Humidity: "));
-    Serial.print(h);
-    Serial.print(F("%  Temperature: "));
-    Serial.print(t);
-    Serial.print(F("°C "));
-    Serial.print(f);
-    Serial.print(F("°F  Heat index: "));
-    Serial.print(hic);
-    Serial.print(F("°C "));
-    Serial.print(hif);
-    Serial.println(F("°F"));
 }
 
 void setup() {
@@ -235,7 +202,23 @@ void loop() {
     if(currentMillis - previousMillis > interval) {
         set_neo_pixel(SENSOR);
         previousMillis = currentMillis;
-        measurment();
+
+        float h = dht.readHumidity();
+        client.publish("node/sensor/dht/humidity", String(h).c_str());
+
+        float t = dht.readTemperature();
+        client.publish("node/sensor/dht/temperature", String(t).c_str());
+
+        // Check if any reads failed and exit early (to try again).
+        if (isnan(h) || isnan(t)) {
+            set_neo_pixel(ALARM);
+            Serial.println(F("Failed to read from DHT sensor!"));
+            return;
+        }
+
+        //Compute heat index in Celsius (isFahreheit = false)
+        float hic = dht.computeHeatIndex(t, h, false);
+        client.publish("node/sensor/dht/heatindex", String(hic).c_str());
         set_neo_pixel(OFF);
     }
 }
