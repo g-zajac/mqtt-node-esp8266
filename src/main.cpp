@@ -1,5 +1,5 @@
 //******************************************************************************
-#define FIRMWARE_VERSION 1.01
+#define FIRMWARE_VERSION 1.02
 #define HOSTNAME "mqttnode"
 //#define PRODUCTION_SERIAL true      //uncoment to turn the serial debuging off
 #define SERIAL_SPEED 9600           // 9600 for BLE friend
@@ -10,6 +10,9 @@
 #include <DNSServer.h>            //Local DNS Server used for redirecting all requests to the configuration portal
 #include <ESP8266WebServer.h>     //Local WebServer used to serve the configuration portal
 #include <WiFiManager.h>          //https://github.com/tzapu/WiFiManager WiFi Configuration Magic
+#include <ESP8266mDNS.h>
+#include <ArduinoOTA.h>
+//   |--------------|-------|---------------|--|--|--|--|--|
 
 WiFiClient espClient;
 
@@ -35,8 +38,44 @@ void setup() {
 
    WiFiManager wifiManager;
    wifiManager.autoConnect("AutoConnectAP");
+
+   // ------------------------------------- OTA -----------------------------------
+  #ifndef PRODUCTION_SERIAL // Not in PRODUCTION
+    Serial.print("Hostname: "); Serial.println(HOSTNAME);
+  #endif
+  ArduinoOTA.setHostname(HOSTNAME);
+  ArduinoOTA.onStart([]() {
+  #ifndef PRODUCTION_SERIAL // Not in PRODUCTION
+    Serial.println("Start updating ");
+  #endif
+  });
+
+  ArduinoOTA.onEnd([]() {
+  #ifndef PRODUCTION_SERIAL // Not in PRODUCTION
+    Serial.println("\nEnd");
+  #endif
+  });
+
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+  #ifndef PRODUCTION_SERIAL // Not in PRODUCTION
+    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+  #endif
+  });
+
+  ArduinoOTA.onError([](ota_error_t error) {
+  #ifndef PRODUCTION_SERIAL // Not in PRODUCTION
+    Serial.printf("Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+    else if (error == OTA_END_ERROR) Serial.println("End Failed");
+  #endif
+  });
+  ArduinoOTA.begin();
+//------------------------------ end OTA ---------------------------------------
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
+    ArduinoOTA.handle();
 }
