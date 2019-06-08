@@ -6,6 +6,12 @@
 //******************************************************************************
 
 #include <Arduino.h>
+#include <ESP8266WiFi.h>          //ESP8266 Core WiFi Library
+#include <DNSServer.h>            //Local DNS Server used for redirecting all requests to the configuration portal
+#include <ESP8266WebServer.h>     //Local WebServer used to serve the configuration portal
+#include <WiFiManager.h>          //https://github.com/tzapu/WiFiManager WiFi Configuration Magic
+
+WiFiClient espClient;
 
 void setup() {
     #ifndef PRODUCTION_SERIAL
@@ -26,6 +32,9 @@ void setup() {
      Serial.print( F("Vcc: ") ); Serial.println(ESP.getVcc());
      Serial.println();
  #endif
+
+   WiFiManager wifiManager;
+   wifiManager.autoConnect("AutoConnectAP");
 }
 
 void loop() {
