@@ -1,5 +1,5 @@
 //******************************************************************************
-#define FIRMWARE_VERSION 1.04
+#define FIRMWARE_VERSION 1.06
 #define HOSTNAME "mqttnode"
 //#define PRODUCTION_SERIAL true      //uncoment to turn the serial debuging off
 #define SERIAL_SPEED 9600           // 9600 for BLE friend
@@ -24,6 +24,16 @@ WiFiClient espClient;
 #include <PubSubClient.h>
 PubSubClient client(espClient);
 
+#include "DHT.h"
+#include "Adafruit_Sensor.h"
+#define DHTPIN 12     // Digital pin connected to the DHT sensor
+// Feather HUZZAH ESP8266 note: use pins 3, 4, 5, 12, 13 or 14 --
+#define DHTTYPE DHT22
+DHT dht(DHTPIN, DHTTYPE);
+
+unsigned long previousMillis, currentMillis = 0;
+int interval = 3 * 1000;
+
 #include <Adafruit_NeoPixel.h>
 #define NEO_PIXEL_PIN 14
 int pixelBrightness = 25;
@@ -38,8 +48,10 @@ uint32_t magenta = strip.Color(255, 0, 255);
 uint32_t blue_light = strip.Color(110, 205, 240);
 uint32_t orange = strip.Color(217, 190, 47);
 uint32_t white = strip.Color(255,255,255);
+uint32_t yellow = strip.Color(255,100,0);
 
-enum list {SETUP, OTA, PORTAL, WIFI, MQTT, OFF, ALARM, TEST};
+
+enum list {SETUP, OTA, PORTAL, WIFI, MQTT, OFF, ALARM, TEST, SENSOR};
 
 void set_neo_pixel(list status){
   uint32_t color;
@@ -52,6 +64,7 @@ void set_neo_pixel(list status){
     case OFF : color = black; break;
     case ALARM : color = red; break;
     case TEST : color = white; break;
+    case SENSOR : color = yellow; break;
   }
   strip.setPixelColor(0, color);
   strip.setBrightness(pixelBrightness);
@@ -80,12 +93,12 @@ void reconnect() {                                                              
       Serial.println("connected");
       set_neo_pixel(MQTT);
       // Once connected, publish an announcement...
-      client.publish("node/status", "connected");
+      client.publish("node/system/status", "connected");
       char ver[4];
       dtostrf(FIRMWARE_VERSION, 3, 2, ver);
-      client.publish("node/firmware", ver);
+      client.publish("node/system/firmware", ver);
       // ... and resubscribe
-      client.subscribe("node/#");
+      client.subscribe("node/test/#");
     } else {
       set_neo_pixel(ALARM);
       Serial.print("failed, rc=");
@@ -123,7 +136,7 @@ void setup() {
    WiFiManager wifiManager;
    wifiManager.autoConnect("AutoConnectAP");
 
-
+   dht.begin();
 
    // ------------------------------------- OTA -----------------------------------
   #ifndef PRODUCTION_SERIAL // Not in PRODUCTION
@@ -166,8 +179,9 @@ void setup() {
 
   ArduinoOTA.begin();
 //------------------------------ end OTA ---------------------------------------
+
     client.setServer(mqtt_server, 1883);
-     client.setCallback(callback);
+    client.setCallback(callback);
 
     delay(500);
     #ifndef PRODUCTION_SERIAL
@@ -183,4 +197,28 @@ void loop() {
             reconnect();
     }
     client.loop();
+
+    currentMillis = millis();
+    if(currentMillis - previousMillis > interval) {
+        set_neo_pixel(SENSOR);
+        previousMillis = currentMillis;
+
+        float h = dht.readHumidity();
+        client.publish("node/sensor/dht/humidity", String(h).c_str());
+
+        float t = dht.readTemperature();
+        client.publish("node/sensor/dht/temperature", String(t).c_str());
+
+        // Check if any reads failed and exit early (to try again).
+        if (isnan(h) || isnan(t)) {
+            set_neo_pixel(ALARM);
+            Serial.println(F("Failed to read from DHT sensor!"));
+            return;
+        }
+
+        //Compute heat index in Celsius (isFahreheit = false)
+        float hic = dht.computeHeatIndex(t, h, false);
+        client.publish("node/sensor/dht/heatindex", String(hic).c_str());
+        set_neo_pixel(OFF);
+    }
 }
