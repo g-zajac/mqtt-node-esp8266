@@ -10,6 +10,7 @@ extern "C" {
 }
 
 #include <Arduino.h>
+#include "credentials.h"
 #include <ESP8266WiFi.h>          //ESP8266 Core WiFi Library
 #include <DNSServer.h>            //Local DNS Server used for redirecting all requests to the configuration portal
 #include <ESP8266WebServer.h>     //Local WebServer used to serve the configuration portal
