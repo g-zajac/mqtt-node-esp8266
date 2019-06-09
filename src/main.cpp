@@ -1,5 +1,5 @@
 //******************************************************************************
-#define FIRMWARE_VERSION 1.10
+#define FIRMWARE_VERSION 1.13
 #define HOSTNAME "mqttnode"
 //#define PRODUCTION_SERIAL true      //uncoment to turn the serial debuging off
 #define SERIAL_SPEED 9600           // 9600 for BLE friend
@@ -23,6 +23,8 @@ WiFiClient espClient;
 
 #include <PubSubClient.h>
 PubSubClient client(espClient);
+
+#define PIR_INPUT 13
 
 #include "DHT.h"
 #include "Adafruit_Sensor.h"
@@ -125,6 +127,7 @@ void reconnect() {                                                              
 void setup() {
     strip.begin();
     delay(200);
+    pinMode(PIR_INPUT, INPUT);
     set_neo_pixel(SETUP);
     #ifndef PRODUCTION_SERIAL
         Serial.begin(SERIAL_SPEED);          // compiling info
@@ -221,6 +224,10 @@ void loop() {
             reconnect();
     }
     client.loop();
+
+    if (digitalRead(PIR_INPUT)){
+        client.publish("node/sensor/pir/movment", "1");
+    }
 
     currentMillis = millis();
     if(currentMillis - previousMillis > interval) {
