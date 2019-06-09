@@ -32,7 +32,7 @@ PubSubClient client(espClient);
 DHT dht(DHTPIN, DHTTYPE);
 
 unsigned long previousMillis, currentMillis = 0;
-int interval = 3 * 1000;
+int interval = 15 * 1000;
 
 #include <Adafruit_NeoPixel.h>
 #define NEO_PIXEL_PIN 14
@@ -76,7 +76,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     payload[length] = '\0';
     String strTopic = String((char*)topic);
 
-    if (strTopic == "node/test") {
+    if (strTopic == "node/test/neo") {
       String msg1 = (char*)payload;
       Serial.print("Received MQTT: "); Serial.println(msg1);
       if (msg1 == "true"){ set_neo_pixel(TEST); }
@@ -186,14 +186,14 @@ void setup() {
     delay(500);
     #ifndef PRODUCTION_SERIAL
         Serial.print("\r\nIP address: ");
-        Serial.println(WiFi.localIP());                                             //FIXME fix 0.0.0.0
+        Serial.println(WiFi.localIP());
     #endif
     set_neo_pixel(WIFI);
 }
 
 void loop() {
     ArduinoOTA.handle();
-    if (!client.connected()) {                                                    // portal button didn't work on first uploads
+    if (!client.connected()) {
             reconnect();
     }
     client.loop();
