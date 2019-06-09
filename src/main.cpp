@@ -1,5 +1,5 @@
 //******************************************************************************
-#define FIRMWARE_VERSION 1.06
+#define FIRMWARE_VERSION 1.07
 #define HOSTNAME "mqttnode"
 //#define PRODUCTION_SERIAL true      //uncoment to turn the serial debuging off
 #define SERIAL_SPEED 9600           // 9600 for BLE friend
@@ -31,8 +31,11 @@ PubSubClient client(espClient);
 #define DHTTYPE DHT22
 DHT dht(DHTPIN, DHTTYPE);
 
+#include "Adafruit_CCS811.h"
+Adafruit_CCS811 ccs;
+
 unsigned long previousMillis, currentMillis = 0;
-int interval = 15 * 1000;
+int interval = 3 * 1000;
 
 #include <Adafruit_NeoPixel.h>
 #define NEO_PIXEL_PIN 14
@@ -138,6 +141,18 @@ void setup() {
 
    dht.begin();
 
+   Serial.println("CCS811 test");
+   if(!ccs.begin()){
+       Serial.println("Failed to start sensor! Please check your wiring.");
+       set_neo_pixel(ALARM);
+   while(1);
+ }
+
+ //calibrate temperature sensor
+  while(!ccs.available());
+  float temp = ccs.calculateTemperature();
+  ccs.setTempOffset(temp - 25.0);
+
    // ------------------------------------- OTA -----------------------------------
   #ifndef PRODUCTION_SERIAL // Not in PRODUCTION
     Serial.print("Hostname: "); Serial.println(HOSTNAME);
@@ -220,5 +235,21 @@ void loop() {
         float hic = dht.computeHeatIndex(t, h, false);
         client.publish("node/sensor/dht/heatindex", String(hic).c_str());
         set_neo_pixel(OFF);
+
+        if(ccs.available()){
+            if(!ccs.readData()){
+                float t = ccs.calculateTemperature();
+                client.publish("node/sensor/ccs/temperature", String(t).c_str());
+                int co2 = ccs.geteCO2();
+                client.publish("node/sensor/ccs/CO2", String(co2).c_str());
+                int tvoc = ccs.getTVOC();
+                client.publish("node/sensor/ccs/TVOC", String(tvoc).c_str());
+            }
+            else{
+              Serial.println("ERROR!");
+              set_neo_pixel(ALARM);
+              while(1);
+            }
+        }
     }
 }
