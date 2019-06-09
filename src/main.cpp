@@ -1,5 +1,5 @@
 //******************************************************************************
-#define FIRMWARE_VERSION 1.06
+#define FIRMWARE_VERSION 1.10
 #define HOSTNAME "mqttnode"
 //#define PRODUCTION_SERIAL true      //uncoment to turn the serial debuging off
 #define SERIAL_SPEED 9600           // 9600 for BLE friend
@@ -31,6 +31,9 @@ PubSubClient client(espClient);
 #define DHTTYPE DHT22
 DHT dht(DHTPIN, DHTTYPE);
 
+#include "Adafruit_CCS811.h"
+Adafruit_CCS811 ccs;
+
 unsigned long previousMillis, currentMillis = 0;
 int interval = 3 * 1000;
 
@@ -49,7 +52,6 @@ uint32_t blue_light = strip.Color(110, 205, 240);
 uint32_t orange = strip.Color(217, 190, 47);
 uint32_t white = strip.Color(255,255,255);
 uint32_t yellow = strip.Color(255,100,0);
-
 
 enum list {SETUP, OTA, PORTAL, WIFI, MQTT, OFF, ALARM, TEST, SENSOR};
 
@@ -75,12 +77,22 @@ void set_neo_pixel(list status){
 void callback(char* topic, byte* payload, unsigned int length) {
     payload[length] = '\0';
     String strTopic = String((char*)topic);
+    Serial.print("Received MQTT: "); Serial.println(strTopic);
 
-    if (strTopic == "node/test") {
+    if (strTopic == "node/setup/neo") {
       String msg1 = (char*)payload;
-      Serial.print("Received MQTT: "); Serial.println(msg1);
       if (msg1 == "true"){ set_neo_pixel(TEST); }
       if (msg1 == "false"){ set_neo_pixel(OFF); }
+    }
+    if (strTopic == "node/setup/interval") {
+      String msg2 = (char*)payload;
+      Serial.println(msg2);
+      interval = msg2.toInt();
+    }
+    if (strTopic == "node/setup/brightness") {
+      String msg3 = (char*)payload;
+      Serial.println(msg3);
+      pixelBrightness = msg3.toInt();
     }
 }
 
@@ -98,7 +110,7 @@ void reconnect() {                                                              
       dtostrf(FIRMWARE_VERSION, 3, 2, ver);
       client.publish("node/system/firmware", ver);
       // ... and resubscribe
-      client.subscribe("node/test/#");
+      client.subscribe("node/setup/#");
     } else {
       set_neo_pixel(ALARM);
       Serial.print("failed, rc=");
@@ -137,6 +149,18 @@ void setup() {
    wifiManager.autoConnect("AutoConnectAP");
 
    dht.begin();
+
+   Serial.println("CCS811 test");
+   if(!ccs.begin()){
+       Serial.println("Failed to start sensor! Please check your wiring.");
+       set_neo_pixel(ALARM);
+   while(1);
+ }
+
+ //calibrate temperature sensor
+  while(!ccs.available());
+  float temp = ccs.calculateTemperature();
+  ccs.setTempOffset(temp - 25.0);
 
    // ------------------------------------- OTA -----------------------------------
   #ifndef PRODUCTION_SERIAL // Not in PRODUCTION
@@ -186,14 +210,14 @@ void setup() {
     delay(500);
     #ifndef PRODUCTION_SERIAL
         Serial.print("\r\nIP address: ");
-        Serial.println(WiFi.localIP());                                             //FIXME fix 0.0.0.0
+        Serial.println(WiFi.localIP());
     #endif
     set_neo_pixel(WIFI);
 }
 
 void loop() {
     ArduinoOTA.handle();
-    if (!client.connected()) {                                                    // portal button didn't work on first uploads
+    if (!client.connected()) {
             reconnect();
     }
     client.loop();
@@ -202,6 +226,9 @@ void loop() {
     if(currentMillis - previousMillis > interval) {
         set_neo_pixel(SENSOR);
         previousMillis = currentMillis;
+
+        client.publish("node/system/interval", String(interval/1000).c_str());
+        client.publish("node/system/brightness", String(pixelBrightness).c_str());
 
         float h = dht.readHumidity();
         client.publish("node/sensor/dht/humidity", String(h).c_str());
@@ -220,5 +247,21 @@ void loop() {
         float hic = dht.computeHeatIndex(t, h, false);
         client.publish("node/sensor/dht/heatindex", String(hic).c_str());
         set_neo_pixel(OFF);
+
+        if(ccs.available()){
+            if(!ccs.readData()){
+                float t = ccs.calculateTemperature();
+                client.publish("node/sensor/ccs/temperature", String(t).c_str());
+                int co2 = ccs.geteCO2();
+                client.publish("node/sensor/ccs/CO2", String(co2).c_str());
+                int tvoc = ccs.getTVOC();
+                client.publish("node/sensor/ccs/TVOC", String(tvoc).c_str());
+            }
+            else{
+              Serial.println("ERROR!");
+              set_neo_pixel(ALARM);
+              while(1);
+            }
+        }
     }
 }
