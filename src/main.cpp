@@ -1,5 +1,5 @@
 //******************************************************************************
-#define FIRMWARE_VERSION 1.13
+#define FIRMWARE_VERSION 1.15
 #define HOSTNAME "mqttnode"
 //#define PRODUCTION_SERIAL true      //uncoment to turn the serial debuging off
 #define SERIAL_SPEED 9600           // 9600 for BLE friend
@@ -38,6 +38,8 @@ Adafruit_CCS811 ccs;
 
 unsigned long previousMillis, currentMillis = 0;
 int interval = 3 * 1000;
+
+bool movmentSensed = false;
 
 #include <Adafruit_NeoPixel.h>
 #define NEO_PIXEL_PIN 14
@@ -226,13 +228,24 @@ void loop() {
     client.loop();
 
     if (digitalRead(PIR_INPUT)){
-        client.publish("node/sensor/pir/movment", "1");
+        movmentSensed = true;
+    };
+
+    if (movmentSensed){
+        set_neo_pixel(SENSOR);
     }
 
     currentMillis = millis();
     if(currentMillis - previousMillis > interval) {
         set_neo_pixel(SENSOR);
         previousMillis = currentMillis;
+
+        if (movmentSensed){
+            client.publish("node/sensor/pir/movment", "1");
+            movmentSensed = false;
+        } else {
+            client.publish("node/sensor/pir/movment", "0");
+        }
 
         client.publish("node/system/interval", String(interval/1000).c_str());
         client.publish("node/system/brightness", String(pixelBrightness).c_str());
@@ -253,7 +266,6 @@ void loop() {
         //Compute heat index in Celsius (isFahreheit = false)
         float hic = dht.computeHeatIndex(t, h, false);
         client.publish("node/sensor/dht/heatindex", String(hic).c_str());
-        set_neo_pixel(OFF);
 
         if(ccs.available()){
             if(!ccs.readData()){
@@ -270,5 +282,7 @@ void loop() {
               while(1);
             }
         }
+        set_neo_pixel(OFF);
+
     }
 }
