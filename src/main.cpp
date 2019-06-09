@@ -1,5 +1,5 @@
 //******************************************************************************
-#define FIRMWARE_VERSION 1.07
+#define FIRMWARE_VERSION 1.08
 #define HOSTNAME "mqttnode"
 //#define PRODUCTION_SERIAL true      //uncoment to turn the serial debuging off
 #define SERIAL_SPEED 9600           // 9600 for BLE friend
@@ -79,11 +79,16 @@ void callback(char* topic, byte* payload, unsigned int length) {
     payload[length] = '\0';
     String strTopic = String((char*)topic);
 
-    if (strTopic == "node/test/neo") {
+    if (strTopic == "node/setup/neo") {
       String msg1 = (char*)payload;
       Serial.print("Received MQTT: "); Serial.println(msg1);
       if (msg1 == "true"){ set_neo_pixel(TEST); }
       if (msg1 == "false"){ set_neo_pixel(OFF); }
+    }
+    if (strTopic == "node/setup/interval") {
+      String msg2 = (char*)payload;
+      Serial.println(msg2);
+      interval = msg2.toInt();
     }
 }
 
@@ -101,7 +106,7 @@ void reconnect() {                                                              
       dtostrf(FIRMWARE_VERSION, 3, 2, ver);
       client.publish("node/system/firmware", ver);
       // ... and resubscribe
-      client.subscribe("node/test/#");
+      client.subscribe("node/setup/#");
     } else {
       set_neo_pixel(ALARM);
       Serial.print("failed, rc=");
@@ -217,6 +222,8 @@ void loop() {
     if(currentMillis - previousMillis > interval) {
         set_neo_pixel(SENSOR);
         previousMillis = currentMillis;
+
+        client.publish("node/system/interval", String(interval/1000).c_str());
 
         float h = dht.readHumidity();
         client.publish("node/sensor/dht/humidity", String(h).c_str());
