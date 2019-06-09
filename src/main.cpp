@@ -1,5 +1,5 @@
 //******************************************************************************
-#define FIRMWARE_VERSION 1.08
+#define FIRMWARE_VERSION 1.10
 #define HOSTNAME "mqttnode"
 //#define PRODUCTION_SERIAL true      //uncoment to turn the serial debuging off
 #define SERIAL_SPEED 9600           // 9600 for BLE friend
@@ -53,7 +53,6 @@ uint32_t orange = strip.Color(217, 190, 47);
 uint32_t white = strip.Color(255,255,255);
 uint32_t yellow = strip.Color(255,100,0);
 
-
 enum list {SETUP, OTA, PORTAL, WIFI, MQTT, OFF, ALARM, TEST, SENSOR};
 
 void set_neo_pixel(list status){
@@ -78,10 +77,10 @@ void set_neo_pixel(list status){
 void callback(char* topic, byte* payload, unsigned int length) {
     payload[length] = '\0';
     String strTopic = String((char*)topic);
+    Serial.print("Received MQTT: "); Serial.println(strTopic);
 
     if (strTopic == "node/setup/neo") {
       String msg1 = (char*)payload;
-      Serial.print("Received MQTT: "); Serial.println(msg1);
       if (msg1 == "true"){ set_neo_pixel(TEST); }
       if (msg1 == "false"){ set_neo_pixel(OFF); }
     }
@@ -89,6 +88,11 @@ void callback(char* topic, byte* payload, unsigned int length) {
       String msg2 = (char*)payload;
       Serial.println(msg2);
       interval = msg2.toInt();
+    }
+    if (strTopic == "node/setup/brightness") {
+      String msg3 = (char*)payload;
+      Serial.println(msg3);
+      pixelBrightness = msg3.toInt();
     }
 }
 
@@ -224,6 +228,7 @@ void loop() {
         previousMillis = currentMillis;
 
         client.publish("node/system/interval", String(interval/1000).c_str());
+        client.publish("node/system/brightness", String(pixelBrightness).c_str());
 
         float h = dht.readHumidity();
         client.publish("node/sensor/dht/humidity", String(h).c_str());
